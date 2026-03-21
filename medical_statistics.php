@@ -3,7 +3,7 @@
  * Plugin Name:  Medical Statistics
  * Plugin URI:   #
  * Description:  Трекер медичних показників — імпорт PDF CSD LAB, зберігання, візуалізація.
- * Version:      1.5.3
+ * Version:      1.5.4
  * Author:       Dev
  * Text Domain:  med-stat
  */
@@ -12,7 +12,7 @@ namespace MedicalStatistics;
 
 defined('ABSPATH') || exit;
 
-define('MED_STAT_VERSION', '1.5.3');
+define('MED_STAT_VERSION', '1.5.4');
 define('MED_STAT_DIR',     plugin_dir_path(__FILE__));
 define('MED_STAT_URL',     plugin_dir_url(__FILE__));
 
@@ -92,6 +92,111 @@ function render_shortcode(): string {
     require MED_STAT_DIR.'views/order.php';
     return (string)ob_get_clean();
 }
+
+/* ════════════════════════════════════════════════════════════
+   SHORTCODE: [medical_analit] — Аналітика показника
+   ════════════════════════════════════════════════════════════ */
+add_shortcode( 'medical_analit', __NAMESPACE__ . '\\render_analit_shortcode' );
+function render_analit_shortcode(): string {
+    if ( ! current_user_can( 'medical_statistics' ) )
+        return '<p class="med-stat-denied">' . esc_html__( 'Доступ заборонено.', 'med-stat' ) . '</p>';
+    ob_start();
+    require MED_STAT_DIR . 'views/med_analit.php';
+    return (string) ob_get_clean();
+}
+
+/* Підключення активів для [medical_analit] */
+add_action( 'wp_enqueue_scripts', __NAMESPACE__ . '\\enqueue_analit_assets' );
+function enqueue_analit_assets(): void {
+    if ( ! current_user_can( 'medical_statistics' ) ) return;
+
+    $vCss = MED_STAT_VERSION . '.' . (file_exists( MED_STAT_DIR . 'css/med_analit.css' ) ? filemtime( MED_STAT_DIR . 'css/med_analit.css' ) : '1');
+    $vJs  = MED_STAT_VERSION . '.' . (file_exists( MED_STAT_DIR . 'js/med_analit.js' )  ? filemtime( MED_STAT_DIR . 'js/med_analit.js'  ) : '1');
+
+    wp_enqueue_style( 'med-analit', MED_STAT_URL . 'css/med_analit.css', [], $vCss );
+
+    // Chart.js v4 (CDN)
+    wp_enqueue_script(
+        'chartjs',
+        'https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js',
+        [], '4.4.3', true
+    );
+    // chartjs-plugin-annotation v3
+    wp_enqueue_script(
+        'chartjs-annotation',
+        'https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js',
+        ['chartjs'], '3.0.1', true
+    );
+    wp_enqueue_script( 'med-analit', MED_STAT_URL . 'js/med_analit.js', ['jquery', 'chartjs', 'chartjs-annotation'], $vJs, true );
+
+    wp_localize_script( 'med-analit', 'medAnalit', [
+        'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+        'nonce'   => wp_create_nonce( 'med_stat_nonce' ),
+        'i18n'    => [
+            'loading'  => __( 'Завантаження…', 'med-stat' ),
+            'noData'   => __( 'Немає даних для цього показника в обраному діапазоні.', 'med-stat' ),
+            'errorNet' => __( 'Помилка мережі. Спробуйте ще раз.', 'med-stat' ),
+            'selectInd'=> __( 'Оберіть показник у фільтрі вище', 'med-stat' ),
+        ],
+    ]);
+}
+
+/* ════════════════════════════════════════════════════════════
+   AJAX: Дані для графіку аналітики
+   ════════════════════════════════════════════════════════════ */
+add_action( 'wp_ajax_med_stat_chart_data', __NAMESPACE__ . '\\ajax_chart_data' );
+function ajax_chart_data(): void {
+    ajax_guard();
+    global $wpdb;
+    $tInd  = $wpdb->prefix . 'med_indicator';
+    $tMeas = $wpdb->prefix . 'med_measurement';
+
+    $indId    = absint( $_POST['ind_id']    ?? 0 );
+    $dateFrom = sanitize_text_field( wp_unslash( $_POST['date_from'] ?? '' ) );
+    $dateTo   = sanitize_text_field( wp_unslash( $_POST['date_to']   ?? '' ) );
+
+    if ( ! $indId ) wp_send_json_error( ['message' => __( 'Оберіть показник.', 'med-stat' )] );
+
+    // Нормалізуємо дати
+    $dtFrom = $dateFrom ? $dateFrom . ' 00:00:00' : '1900-01-01 00:00:00';
+    $dtTo   = $dateTo   ? $dateTo   . ' 23:59:59' : '2099-12-31 23:59:59';
+
+    $rows = $wpdb->get_results( $wpdb->prepare(
+        "SELECT i.id, i.name, i.min, i.max, i.measure,
+                m.result_value, m.execution_date, m.is_normal
+         FROM {$tInd} i
+         JOIN {$tMeas} m ON m.id_indicator = i.id
+         WHERE i.id = %d
+           AND m.execution_date BETWEEN %s AND %s
+         ORDER BY m.execution_date ASC",
+        $indId, $dtFrom, $dtTo
+    ) );
+
+    if ( empty( $rows ) ) {
+        wp_send_json_error( ['message' => __( 'Немає даних для цього показника в обраному діапазоні.', 'med-stat' ), 'empty' => true] );
+    }
+
+    $meta = $rows[0]; // name, min, max, measure однакові для всього показника
+
+    $labels = [];
+    $values = [];
+    foreach ( $rows as $row ) {
+        // Форматуємо дату для X-осі
+        $ts = $row->execution_date ? strtotime( $row->execution_date ) : 0;
+        $labels[] = $ts ? date( 'd.m.Y', $ts ) : '—';
+        $values[] = (float) $row->result_value;
+    }
+
+    wp_send_json_success( [
+        'name'    => $meta->name,
+        'min'     => $meta->min !== null ? (float) $meta->min : null,
+        'max'     => $meta->max !== null ? (float) $meta->max : null,
+        'measure' => $meta->measure ?? '',
+        'labels'  => $labels,
+        'values'  => $values,
+    ] );
+}
+
 
 /* ── AJAX guard ── */
 function ajax_guard(): void {
