@@ -1,0 +1,862 @@
+/*
+ * med_stat.css — Medical Statistics WordPress Plugin
+ *
+ * ВАЖЛИВО: #ms-loading НЕ має властивості display у цьому файлі.
+ * Відображення спіннера керується ВИКЛЮЧНО через:
+ *   HTML:  style="display:none"   (початковий стан)
+ *   JS:    element.style.display = 'flex' | 'none'
+ * Це гарантує що жодне CSS-правило теми не може показати спіннер без JS.
+ */
+
+/* ════════════════════════════════════════════════════════════
+   СКИДАННЯ ТА КОРЕНЕВІ ЗМІННІ
+   ════════════════════════════════════════════════════════════ */
+
+.med-stat-app *,
+.med-stat-app *::before,
+.med-stat-app *::after {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+.med-stat-app {
+    --ms-font:        -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    --ms-fs:          14px;
+    --ms-fs-sm:       13px;
+    --ms-fs-xs:       11px;
+
+    --ms-bg:          #ffffff;
+    --ms-bg-side:     #f7f8fa;
+    --ms-border:      #e4e6ea;
+    --ms-text:        #1c1e21;
+    --ms-text-sub:    #8a8f9a;
+    --ms-primary:     #3451d1;
+    --ms-primary-hov: #2a42b5;
+    --ms-active-bg:   #eef1fd;
+    --ms-active-text: #3451d1;
+    --ms-abnorm-bg:   #fff5f5;
+    --ms-abnorm-val:  #c0392b;
+
+    --ms-sidebar-w:   268px;
+    --ms-header-h:    56px;
+    --ms-radius:      10px;
+
+    display: flex;
+    width: 100%;
+    min-height: 480px;
+    height: 80vh;
+    max-height: 880px;
+    font-family: var(--ms-font);
+    font-size: var(--ms-fs);
+    line-height: 1.45;
+    color: var(--ms-text);
+    background: var(--ms-bg);
+    border: 1px solid var(--ms-border);
+    border-radius: var(--ms-radius);
+    overflow: hidden;
+    position: relative;
+}
+
+/* Доступність: приховано для зрячих */
+.ms-sr-only {
+    position: absolute;
+    width: 1px; height: 1px;
+    overflow: hidden;
+    clip: rect(0,0,0,0);
+    white-space: nowrap;
+}
+
+/* ════════════════════════════════════════════════════════════
+   САЙДБАР
+   ════════════════════════════════════════════════════════════ */
+
+.ms-sidebar {
+    width: var(--ms-sidebar-w);
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    background: var(--ms-bg-side);
+    border-right: 1px solid var(--ms-border);
+    overflow: hidden;
+}
+
+/* Пошук */
+.ms-sidebar__search {
+    padding: 14px 12px 10px;
+    border-bottom: 1px solid var(--ms-border);
+    flex-shrink: 0;
+}
+
+.ms-search-wrap {
+    position: relative;
+}
+
+.ms-search-icon {
+    position: absolute;
+    left: 9px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--ms-text-sub);
+    pointer-events: none;
+    display: flex;
+    align-items: center;
+}
+
+/* Фільтр дат */
+.ms-sidebar__dates {
+    padding: 10px 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    border-bottom: 1px solid var(--ms-border);
+    flex-shrink: 0;
+}
+
+.ms-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+/* ════════════════════════════════════════════════════════════
+   ФОРМ-ЕЛЕМЕНТИ
+   ════════════════════════════════════════════════════════════ */
+
+.ms-label {
+    font-size: var(--ms-fs-xs);
+    font-weight: 600;
+    color: var(--ms-text-sub);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+
+.ms-input {
+    width: 100%;
+    padding: 6px 10px;
+    font-family: var(--ms-font);
+    font-size: var(--ms-fs-sm);
+    color: var(--ms-text);
+    background: #fff;
+    border: 1px solid var(--ms-border);
+    border-radius: 6px;
+    outline: none;
+    transition: border-color .15s, box-shadow .15s;
+    -webkit-appearance: none;
+    appearance: none;
+}
+
+.ms-input:focus {
+    border-color: var(--ms-primary);
+    box-shadow: 0 0 0 3px rgba(52, 81, 209, .12);
+}
+
+.ms-input--search {
+    padding-left: 32px;
+}
+
+/* ════════════════════════════════════════════════════════════
+   СПИСОК ЗАМОВЛЕНЬ
+   ════════════════════════════════════════════════════════════ */
+
+.ms-order-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 4px 0;
+}
+
+.ms-order-item {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 6px;
+    width: 100%;
+    padding: 9px 14px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: left;
+    font-family: var(--ms-font);
+    font-size: var(--ms-fs-sm);
+    color: var(--ms-text);
+    transition: background .1s;
+}
+
+.ms-order-item:hover {
+    background: rgba(0,0,0,.04);
+}
+
+.ms-order-item--active,
+.ms-order-item--active:hover {
+    background: var(--ms-active-bg);
+    color: var(--ms-active-text);
+}
+
+.ms-order-item__num {
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex: 1;
+    min-width: 0;
+}
+
+.ms-order-item__date {
+    font-size: var(--ms-fs-xs);
+    color: var(--ms-text-sub);
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.ms-order-item--active .ms-order-item__date {
+    color: var(--ms-active-text);
+    opacity: .7;
+}
+
+/* ════════════════════════════════════════════════════════════
+   ПАГІНАЦІЯ
+   ════════════════════════════════════════════════════════════ */
+
+.ms-pagination {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 10px 12px;
+    border-top: 1px solid var(--ms-border);
+    flex-shrink: 0;
+}
+
+.ms-pagination--hidden {
+    display: none;
+}
+
+.ms-page-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 28px;
+    height: 28px;
+    padding: 0;
+    background: #fff;
+    border: 1px solid var(--ms-border);
+    border-radius: 5px;
+    color: var(--ms-text);
+    cursor: pointer;
+    transition: background .1s, border-color .1s;
+}
+
+.ms-page-btn:hover:not(:disabled) {
+    background: var(--ms-active-bg);
+    border-color: var(--ms-primary);
+    color: var(--ms-primary);
+}
+
+.ms-page-btn:disabled {
+    opacity: .35;
+    cursor: not-allowed;
+}
+
+.ms-page-label {
+    font-size: var(--ms-fs-xs);
+    color: var(--ms-text-sub);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-width: 44px;
+    justify-content: center;
+}
+
+/* ════════════════════════════════════════════════════════════
+   ГОЛОВНА ПАНЕЛЬ
+   ════════════════════════════════════════════════════════════ */
+
+.ms-main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    position: relative;
+    min-width: 0;
+}
+
+.ms-main.ms-drag-over {
+    outline: 2px dashed var(--ms-primary);
+    outline-offset: -6px;
+}
+
+/* Хедер */
+.ms-main__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 0 20px;
+    height: var(--ms-header-h);
+    border-bottom: 1px solid var(--ms-border);
+    flex-shrink: 0;
+}
+
+.ms-order-meta {
+    min-width: 0;
+    flex: 1;
+}
+
+.ms-order-meta__title {
+    font-size: var(--ms-fs);
+    font-weight: 600;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.ms-order-meta__subtitle {
+    font-size: var(--ms-fs-xs);
+    color: var(--ms-text-sub);
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin-top: 2px;
+}
+
+.ms-dot {
+    opacity: .4;
+    flex-shrink: 0;
+}
+
+.ms-main__actions {
+    flex-shrink: 0;
+}
+
+/* Кнопка */
+.ms-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 14px;
+    font-family: var(--ms-font);
+    font-size: var(--ms-fs-sm);
+    font-weight: 500;
+    line-height: 1;
+    border: none;
+    border-radius: 7px;
+    cursor: pointer;
+    transition: background .15s, transform .1s;
+    white-space: nowrap;
+}
+
+.ms-btn:active {
+    transform: translateY(1px);
+}
+
+.ms-btn--primary {
+    background: var(--ms-primary);
+    color: #fff;
+}
+
+.ms-btn--primary:hover {
+    background: var(--ms-primary-hov);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ТАБЛИЦЯ ПОКАЗНИКІВ
+   ════════════════════════════════════════════════════════════ */
+
+.ms-table-wrap {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding-bottom: 16px;
+}
+
+.ms-table-head,
+.ms-row {
+    display: grid;
+    grid-template-columns: 1fr 150px 170px;
+    border-bottom: 1px solid var(--ms-border);
+}
+
+/* Хедер таблиці */
+.ms-table-head {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    background: var(--ms-bg);
+    border-bottom: 2px solid var(--ms-border);
+}
+
+.ms-table-head .ms-col {
+    padding: 9px 16px 9px 20px;
+    font-size: var(--ms-fs-xs);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--ms-text-sub);
+    border-bottom: none;
+}
+
+/* Колонка */
+.ms-col {
+    padding: 10px 16px 10px 20px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 2px;
+}
+
+/* Відхилення від норми */
+.ms-row--abnormal {
+    background: var(--ms-abnorm-bg);
+}
+
+/* Показник */
+.ms-indicator__name {
+    font-size: var(--ms-fs-sm);
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.ms-indicator__category {
+    font-size: var(--ms-fs-xs);
+    color: var(--ms-text-sub);
+    line-height: 1.2;
+}
+
+.ms-indicator__codes {
+    font-size: var(--ms-fs-xs);
+    color: var(--ms-text-sub);
+    opacity: .75;
+}
+
+/* Результат */
+.ms-value {
+    font-size: var(--ms-fs-sm);
+    font-weight: 700;
+}
+
+.ms-value--abnormal {
+    color: var(--ms-abnorm-val);
+}
+
+.ms-unit {
+    font-size: var(--ms-fs-xs);
+    color: var(--ms-text-sub);
+}
+
+/* Реф. діапазон */
+.ms-ref {
+    font-size: var(--ms-fs-sm);
+    color: var(--ms-text-sub);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ПОРОЖНІ СТАНИ
+   ════════════════════════════════════════════════════════════ */
+
+.ms-empty {
+    padding: 14px 20px;
+    font-size: var(--ms-fs-sm);
+    color: var(--ms-text-sub);
+}
+
+.ms-empty--main,
+.ms-welcome {
+    padding: 48px 24px;
+    text-align: center;
+    color: var(--ms-text-sub);
+    font-size: var(--ms-fs-sm);
+}
+
+.ms-text-muted {
+    color: var(--ms-text-sub);
+}
+
+/* ════════════════════════════════════════════════════════════
+   ОВЕРЛЕЙ ЗАВАНТАЖЕННЯ
+   ════════════════════════════════════════════════════════════
+   !!! ТІЛЬКИ ПОЗИЦІОНУВАННЯ ТА СТИЛІЗАЦІЯ !!!
+   Властивість display НЕ вказана — нею керує ВИКЛЮЧНО JS
+   через element.style.display = 'flex' | 'none'
+   Початковий стан: style="display:none" у HTML-атрибуті.
+   ════════════════════════════════════════════════════════════ */
+
+#ms-loading {
+    position: absolute;
+    top: var(--ms-header-h);   /* нижче хедера — кнопка «Імпорт» доступна */
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(255,255,255,.82);
+    align-items: center;       /* діє коли JS встановить display:flex */
+    justify-content: center;
+    z-index: 10;
+}
+
+.ms-spinner {
+    width: 26px;
+    height: 26px;
+    border: 3px solid var(--ms-border);
+    border-top-color: var(--ms-primary);
+    border-radius: 50%;
+    animation: ms-spin .7s linear infinite;
+}
+
+@keyframes ms-spin {
+    to { transform: rotate(360deg); }
+}
+
+/* ════════════════════════════════════════════════════════════
+   TOAST
+   ════════════════════════════════════════════════════════════ */
+
+.ms-toast {
+    position: absolute;
+    bottom: 16px;
+    right: 16px;
+    z-index: 20;
+    padding: 10px 16px;
+    border-radius: 7px;
+    font-size: var(--ms-fs-sm);
+    font-weight: 500;
+    max-width: 320px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.12);
+    animation: ms-slide-up .2s ease;
+}
+
+@keyframes ms-slide-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.ms-toast--info    { background: #f0f4ff; color: #3451d1; border: 1px solid #c5d0f7; }
+.ms-toast--success { background: #f0faf4; color: #1d7a43; border: 1px solid #b2dfcc; }
+.ms-toast--error   { background: #fff5f5; color: #c0392b; border: 1px solid #fbc8c8; }
+
+/* ════════════════════════════════════════════════════════════
+   АДАПТИВНІСТЬ  (< 640px)
+   ════════════════════════════════════════════════════════════ */
+
+@media (max-width: 640px) {
+    .med-stat-app {
+        flex-direction: column;
+        height: auto;
+        max-height: none;
+    }
+
+    .ms-sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid var(--ms-border);
+        max-height: 260px;
+    }
+
+    .ms-table-head,
+    .ms-row {
+        grid-template-columns: 1fr 110px 110px;
+    }
+}
+
+/* ═══════════════════════════ v1.3.1 additions ═══════════════════════════ */
+
+/* Хедер замовлення */
+.ms-order-meta__top {
+    display: flex;
+    align-items: baseline;
+    gap: 12px;
+    flex-wrap: wrap;
+}
+.ms-order-meta__date {
+    font-size: var(--ms-fs-sm);
+    color: var(--ms-text-sub);
+    white-space: nowrap;
+}
+.ms-order-meta__details {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 4px;
+    font-size: var(--ms-fs-xs);
+    color: var(--ms-text-sub);
+    margin-top: 2px;
+    line-height: 1.4;
+}
+.ms-order-meta__details .ms-dot { opacity:.4; }
+
+/* Кнопка видалення */
+.ms-btn--danger {
+    background: #fff0f0;
+    color: var(--ms-abnorm-val);
+    border: 1px solid #fbc8c8;
+}
+.ms-btn--danger:hover { background: #ffe0e0; }
+
+/* Підказка (interpretation_hint) — дрібний шрифт */
+.ms-indicator__hint {
+    display: block;
+    font-size: 10px;
+    color: var(--ms-text-sub);
+    line-height: 1.3;
+    margin-top: 2px;
+    opacity: .8;
+}
+
+/* Колонка кнопки редагування */
+.ms-col--action {
+    width: 36px;
+    flex-shrink: 0;
+    padding: 8px 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ms-table-head,
+.ms-row {
+    grid-template-columns: 1fr 150px 170px 36px !important;
+}
+
+/* Кнопка редагування */
+.ms-edit-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--ms-text-sub);
+    opacity: 0;
+    transition: opacity .15s, color .15s;
+    padding: 4px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+}
+.ms-row:hover .ms-edit-btn { opacity: 1; }
+.ms-edit-btn:hover { color: var(--ms-primary); background: var(--ms-active-bg); }
+
+/* Кнопка Скасувати — помаранчева */
+.ms-btn--orange {
+    background: #ff8c00;
+    color: #fff;
+    border: none;
+}
+.ms-btn--orange:hover { background: #e07b00; }
+
+/* Modal overlay */
+.ms-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.ms-modal__overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0,0,0,.45);
+}
+.ms-modal__box {
+    position: relative;
+    background: #fff;
+    border-radius: 10px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.2);
+    width: 560px;
+    max-width: 95vw;
+    max-height: 90vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;  /* footer завжди видимий, body scrollable */
+}
+.ms-modal__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--ms-border);
+    flex-shrink: 0;
+}
+.ms-modal__title { font-size: var(--ms-fs); font-weight: 600; }
+.ms-modal__close {
+    background: none; border: none; cursor: pointer;
+    font-size: 18px; color: var(--ms-text-sub); line-height: 1; padding: 2px 6px;
+}
+.ms-modal__close:hover { color: var(--ms-text); }
+.ms-modal__body { padding: 20px; overflow-y: auto; flex: 1; }
+.ms-modal__grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px;
+}
+.ms-form-field { display: flex; flex-direction: column; gap: 4px; }
+.ms-form-field label { font-size: var(--ms-fs-xs); font-weight: 600; color: var(--ms-text-sub); text-transform: uppercase; letter-spacing: .04em; }
+.ms-form-field input { padding: 7px 10px; }
+.ms-modal__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--ms-border);
+    flex-shrink: 0;
+}
+
+/* ════════════════════════════════════════════════════════════
+   НОВІ СТИЛІ v1.5.2
+   ════════════════════════════════════════════════════════════ */
+
+/* ── Кнопка "Новий запис" ── */
+.ms-btn--add {
+    background: var(--ms-primary);
+    color: #fff;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+.ms-btn--add:hover { background: var(--ms-primary-hov); }
+
+.ms-btn--sm {
+    padding: 5px 10px;
+    font-size: var(--ms-fs-xs);
+}
+.ms-btn--outline {
+    background: transparent;
+    color: var(--ms-primary);
+    border: 1.5px solid var(--ms-primary);
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
+.ms-btn--outline:hover { background: rgba(0,115,170,.07); }
+
+/* ── Toast warning ── */
+.ms-toast--warning { background: #856404; }
+
+/* ── Поле full-width у гріді ── */
+.ms-form-field--full { grid-column: 1 / -1; }
+
+/* ════════════════════════════════════════════════════════════
+   ADD MODAL
+   ════════════════════════════════════════════════════════════ */
+.ms-modal--wide .ms-modal__box { max-width: 900px; width: 96vw; }
+.ms-modal__box--wide { max-width: 900px; }
+
+.ms-add-body { display: flex; flex-direction: column; gap: 24px; }
+
+.ms-add-section { }
+.ms-add-section__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 10px;
+}
+.ms-add-section__title {
+    font-size: var(--ms-fs);
+    font-weight: 600;
+    color: var(--ms-text);
+    margin: 0;
+}
+.ms-add-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 12px;
+}
+.ms-add-grid--header { grid-template-columns: 1fr 1fr; }
+
+/* Таблиця показників */
+.ms-meas-table-wrap { overflow-x: auto; }
+.ms-meas-table-head {
+    display: grid;
+    grid-template-columns: 2.5fr 70px 70px 90px 110px 160px 32px;
+    gap: 6px;
+    padding: 6px 4px;
+    border-bottom: 2px solid var(--ms-border);
+    font-size: var(--ms-fs-xs);
+    font-weight: 600;
+    color: var(--ms-text-sub);
+    text-transform: uppercase;
+    letter-spacing: .04em;
+}
+.ms-meas-row {
+    display: grid;
+    grid-template-columns: 2.5fr 70px 70px 90px 110px 160px 32px;
+    gap: 6px;
+    padding: 6px 0;
+    border-bottom: 1px solid var(--ms-border);
+    align-items: center;
+}
+.ms-meas-cell { position: relative; }
+.ms-meas-cell--name { position: relative; }
+.ms-meas-cell--del { display: flex; align-items: center; justify-content: center; }
+
+.ms-ind-search { width: 100%; box-sizing: border-box; }
+.ms-ind-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 1px solid var(--ms-border);
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.12);
+    z-index: 200;
+    max-height: 200px;
+    overflow-y: auto;
+}
+.ms-ind-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    font-size: var(--ms-fs);
+    color: var(--ms-text);
+    border-bottom: 1px solid var(--ms-border);
+}
+.ms-ind-option:last-child { border-bottom: none; }
+.ms-ind-option:hover { background: #f0f6ff; color: var(--ms-primary); }
+
+.ms-ind-min, .ms-ind-max, .ms-ind-measure {
+    background: var(--ms-bg-light, #f9f9f9);
+    color: var(--ms-text-sub);
+    font-size: var(--ms-fs-xs);
+}
+
+.ms-row-del-btn {
+    background: none;
+    border: none;
+    color: #c00;
+    cursor: pointer;
+    padding: 4px;
+    border-radius: 4px;
+    line-height: 1;
+    opacity: .6;
+    transition: opacity .15s;
+}
+.ms-row-del-btn:hover { opacity: 1; }
+
+/* ── Edit modal: Зберегти кнопка завжди видима ── */
+.ms-modal__footer {
+    display: flex !important;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 14px 20px;
+    border-top: 1px solid var(--ms-border);
+    flex-shrink: 0;
+    background: var(--ms-bg, #fff);
+}
+.ms-modal__box {
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+    overflow: hidden;
+}
+#ms-modal-save, #ms-add-modal-save {
+    background: var(--ms-primary) !important;
+    color: #fff !important;
+    display: inline-flex !important;
+    visibility: visible !important;
+    opacity: 1 !important;
+}
+#ms-modal-save:hover, #ms-add-modal-save:hover {
+    background: var(--ms-primary-hov) !important;
+}
+
+/* ── ms-btn--orange (cancel) ── */
+.ms-btn--orange {
+    background: #ff8c00;
+    color: #fff;
+}
+.ms-btn--orange:hover { background: #e07b00; }
