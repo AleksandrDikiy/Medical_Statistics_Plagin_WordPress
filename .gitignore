@@ -1,0 +1,21 @@
+# JetBrains IDE files
+.idea/
+*.iws
+*.iml
+*.ipr
+
+# WordPress files
+wp-config.php
+wp-content/uploads/
+wp-content/upgrade/
+wp-content/backup-db/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Plugin specific
+/vendor/
+node_modules/
+.env
