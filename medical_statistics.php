@@ -2,9 +2,9 @@
 /**
  * Plugin Name:  Medical Statistics
  * Plugin URI:   #
- * Description:  Трекер медичних показників — імпорт PDF CSD LAB, зберігання, візуалізація.
+ * Description:  Трекер медичних показників — імпорт PDF CSD LAB, зберігання, візуалізація, аналітика.
  * Version:      1.5.4
- * Author:       Dev
+ * Author:       DAV
  * Text Domain:  med-stat
  */
 
