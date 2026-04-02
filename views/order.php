@@ -1,55 +1,120 @@
 <?php
+/**
+ * views/order.php — Main orders UI
+ *
+ * Row-level security is applied both to the initial server-side render and
+ * to every subsequent AJAX call that re-fetches orders.  Administrators see
+ * all records; regular users see only their own.
+ *
+ * The user-filter dropdown is rendered exclusively for administrators and is
+ * never emitted (not just hidden) for regular users, which prevents any
+ * client-side bypass.
+ */
+
+declare( strict_types = 1 );
+
 namespace MedicalStatistics;
-defined('ABSPATH') || exit;
+
+defined( 'ABSPATH' ) || exit;
 
 med_stat_ensure_tables();
 
 global $wpdb;
-$T_ORD  = $wpdb->prefix.'med_ordering';
-$T_MEAS = $wpdb->prefix.'med_measurement';
-$T_IND  = $wpdb->prefix.'med_indicator';
+$T_ORD  = $wpdb->prefix . 'med_ordering';
+$T_MEAS = $wpdb->prefix . 'med_measurement';
+$T_IND  = $wpdb->prefix . 'med_indicator';
 
-$date_from = date('Y-m-d', strtotime('-365 days'));
-$date_to   = date('Y-m-d');
+$date_from    = date( 'Y-m-d', strtotime( '-365 days' ) );
+$date_to      = date( 'Y-m-d' );
+$current_uid  = get_current_user_id();
+$viewer_is_admin = current_user_can( 'manage_options' );
 
-$sidebar_orders = $wpdb->get_results($wpdb->prepare(
-    "SELECT id,order_number,patient_name,collection_date FROM {$T_ORD}
-     WHERE DATE(COALESCE(collection_date,created_at)) BETWEEN %s AND %s
-     ORDER BY COALESCE(collection_date,created_at) DESC LIMIT 10",
-    $date_from, $date_to
-)) ?: [];
+/* ── Row-level security helper for raw SQL in this view ─────────────────── */
+// Returns a SQL fragment (already safe) and appends any needed args to $args.
+$rls_where = static function ( array &$args ) use ( $viewer_is_admin, $current_uid ): string {
+    if ( $viewer_is_admin ) {
+        return '';
+    }
+    $args[] = $current_uid;
+    return ' AND id_user = %d';
+};
 
-$total_orders = (int)$wpdb->get_var($wpdb->prepare(
-    "SELECT COUNT(*) FROM {$T_ORD} WHERE DATE(COALESCE(collection_date,created_at)) BETWEEN %s AND %s",
-    $date_from, $date_to
-));
-$total_pages  = max(1,(int)ceil($total_orders/10));
-$first_order  = $sidebar_orders[0] ?? null;
+/* ── Initial sidebar data (server-side render) ───────────────────────────── */
+$args_sidebar = [ $date_from, $date_to ];
+$rls_sidebar  = $rls_where( $args_sidebar );
+
+$sidebar_orders = $wpdb->get_results(
+    $wpdb->prepare(
+        "SELECT id, order_number, patient_name, collection_date
+         FROM {$T_ORD}
+         WHERE DATE(COALESCE(collection_date,created_at)) BETWEEN %s AND %s
+         {$rls_sidebar}
+         ORDER BY COALESCE(collection_date,created_at) DESC
+         LIMIT 10",
+        ...$args_sidebar
+    )
+) ?: [];
+
+$args_count  = [ $date_from, $date_to ];
+$rls_count   = $rls_where( $args_count );
+$total_orders = (int) $wpdb->get_var(
+    $wpdb->prepare(
+        "SELECT COUNT(*) FROM {$T_ORD}
+         WHERE DATE(COALESCE(collection_date,created_at)) BETWEEN %s AND %s
+         {$rls_count}",
+        ...$args_count
+    )
+);
+
+$total_pages = max( 1, (int) ceil( $total_orders / 10 ) );
+$first_order = $sidebar_orders[0] ?? null;
+
+/* ── Initial measurement data for the first order ────────────────────────── */
 $measurements = [];
-if ($first_order) {
-    $measurements = $wpdb->get_results($wpdb->prepare(
-        "SELECT m.id AS meas_id, m.result_value, m.execution_date, m.is_normal,
-                i.id AS ind_id, i.name AS ind_name,
-                i.min, i.max, i.measure, i.category, i.interpretation_hint
-         FROM {$T_MEAS} m INNER JOIN {$T_IND} i ON i.id=m.id_indicator
-         WHERE m.id_order=%d ORDER BY COALESCE(i.category,'я'),i.name",
-        absint($first_order->id)
-    )) ?: [];
+if ( $first_order ) {
+    // Extra ownership guard even for the initial render.
+    $can_view = $viewer_is_admin || ( (int) $first_order->id === $current_uid );
+    if ( $can_view || $viewer_is_admin ) {
+        $measurements = $wpdb->get_results(
+            $wpdb->prepare(
+                "SELECT m.id AS meas_id, m.result_value, m.execution_date, m.is_normal,
+                        i.id AS ind_id, i.name AS ind_name,
+                        i.min, i.max, i.measure, i.category, i.interpretation_hint
+                 FROM {$T_MEAS} m
+                 INNER JOIN {$T_IND} i ON i.id = m.id_indicator
+                 WHERE m.id_order = %d
+                 ORDER BY COALESCE(i.category,'я'), i.name",
+                absint( $first_order->id )
+            )
+        ) ?: [];
+    }
 }
 
-function ms_date(?string $dt): string {
-    if (!$dt) return '—';
-    $ts = strtotime($dt);
-    return $ts ? date('d.m.Y', $ts) : $dt;
+/* ── Admin user list for the filter dropdown ─────────────────────────────── */
+$admin_users = [];
+if ( $viewer_is_admin ) {
+    $admin_users = $wpdb->get_results(
+        "SELECT DISTINCT u.ID AS id, u.display_name AS name
+         FROM {$wpdb->users} u
+         INNER JOIN {$T_ORD} o ON o.id_user = u.ID
+         ORDER BY u.display_name ASC"
+    ) ?: [];
 }
-function ms_datetime(?string $dt): string {
-    if (!$dt) return '—';
-    $ts = strtotime($dt);
-    return $ts ? date('d.m.Y, H:i', $ts) : $dt;
+
+/* ── Template helpers ────────────────────────────────────────────────────── */
+function ms_date( ?string $dt ): string {
+    if ( ! $dt ) return '—';
+    $ts = strtotime( $dt );
+    return $ts ? date( 'd.m.Y', $ts ) : $dt;
 }
-function ms_num($n): string {
-    if ($n === null || $n === '') return '—';
-    return rtrim(rtrim(number_format((float)$n, 4, '.', ''), '0'), '.');
+function ms_datetime( ?string $dt ): string {
+    if ( ! $dt ) return '—';
+    $ts = strtotime( $dt );
+    return $ts ? date( 'd.m.Y, H:i', $ts ) : $dt;
+}
+function ms_num( $n ): string {
+    if ( $n === null || $n === '' ) return '—';
+    return rtrim( rtrim( number_format( (float) $n, 4, '.', '' ), '0' ), '.' );
 }
 ?>
 <div id="med-stat-app" class="med-stat-app">
@@ -69,35 +134,55 @@ function ms_num($n): string {
   <div class="ms-sidebar__dates">
     <div class="ms-field">
       <label class="ms-label" for="ms-date-from">Від:</label>
-      <input id="ms-date-from" type="date" class="ms-input" value="<?php echo esc_attr($date_from); ?>" max="<?php echo esc_attr($date_to); ?>">
+      <input id="ms-date-from" type="date" class="ms-input" value="<?php echo esc_attr( $date_from ); ?>" max="<?php echo esc_attr( $date_to ); ?>">
     </div>
     <div class="ms-field">
       <label class="ms-label" for="ms-date-to">До:</label>
-      <input id="ms-date-to" type="date" class="ms-input" value="<?php echo esc_attr($date_to); ?>" min="<?php echo esc_attr($date_from); ?>">
+      <input id="ms-date-to" type="date" class="ms-input" value="<?php echo esc_attr( $date_to ); ?>" min="<?php echo esc_attr( $date_from ); ?>">
     </div>
   </div>
 
+  <?php if ( $viewer_is_admin && ! empty( $admin_users ) ) : ?>
+  <!--
+    USER FILTER — administrators only.
+    This block is never rendered for regular users; it is not merely hidden.
+    The JS loadOrders() call reads #ms-user-filter only when medStat.isAdmin
+    is true, providing a second layer of protection.
+  -->
+  <div class="ms-sidebar__user-filter">
+    <div class="ms-field">
+      <label class="ms-label" for="ms-user-filter">Користувач:</label>
+      <select id="ms-user-filter" class="ms-input ms-input--select">
+        <option value="0"><?php echo esc_html__( 'Усі користувачі', 'med-stat' ); ?></option>
+        <?php foreach ( $admin_users as $u ) : ?>
+          <option value="<?php echo absint( $u->id ); ?>"><?php echo esc_html( $u->name ); ?></option>
+        <?php endforeach; ?>
+      </select>
+    </div>
+  </div>
+  <?php endif; ?>
+
   <nav id="ms-order-list" class="ms-order-list" aria-label="Замовлення">
-    <?php if ($sidebar_orders): foreach ($sidebar_orders as $i => $ord): ?>
+    <?php if ( $sidebar_orders ) : foreach ( $sidebar_orders as $i => $ord ) : ?>
       <button type="button"
-        class="ms-order-item <?php echo $i===0?'ms-order-item--active':''; ?>"
-        data-order-id="<?php echo absint($ord->id); ?>"
-        aria-pressed="<?php echo $i===0?'true':'false'; ?>">
-        <span class="ms-order-item__num">№ <?php echo esc_html($ord->order_number??'—'); ?></span>
-        <span class="ms-order-item__date"><?php echo esc_html(ms_date($ord->collection_date)); ?></span>
+        class="ms-order-item <?php echo $i === 0 ? 'ms-order-item--active' : ''; ?>"
+        data-order-id="<?php echo absint( $ord->id ); ?>"
+        aria-pressed="<?php echo $i === 0 ? 'true' : 'false'; ?>">
+        <span class="ms-order-item__num">№ <?php echo esc_html( $ord->order_number ?? '—' ); ?></span>
+        <span class="ms-order-item__date"><?php echo esc_html( ms_date( $ord->collection_date ) ); ?></span>
       </button>
-    <?php endforeach; else: ?>
+    <?php endforeach; else : ?>
       <p class="ms-empty">Немає замовлень у цьому діапазоні.</p>
     <?php endif; ?>
   </nav>
 
-  <div id="ms-pagination" class="ms-pagination <?php echo $total_pages<=1?'ms-pagination--hidden':''; ?>"
-       data-current="1" data-total="<?php echo absint($total_pages); ?>">
+  <div id="ms-pagination" class="ms-pagination <?php echo $total_pages <= 1 ? 'ms-pagination--hidden' : ''; ?>"
+       data-current="1" data-total="<?php echo absint( $total_pages ); ?>">
     <button type="button" id="ms-prev-page" class="ms-page-btn" disabled aria-label="Попередня">
       <svg width="7" height="12" viewBox="0 0 7 12" aria-hidden="true"><path d="M6 1L1 6l5 5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
     </button>
-    <span class="ms-page-label"><span id="ms-page-current">1</span> / <span id="ms-page-total"><?php echo absint($total_pages); ?></span></span>
-    <button type="button" id="ms-next-page" class="ms-page-btn" <?php disabled($total_pages,1); ?> aria-label="Наступна">
+    <span class="ms-page-label"><span id="ms-page-current">1</span> / <span id="ms-page-total"><?php echo absint( $total_pages ); ?></span></span>
+    <button type="button" id="ms-next-page" class="ms-page-btn" <?php disabled( $total_pages, 1 ); ?> aria-label="Наступна">
       <svg width="7" height="12" viewBox="0 0 7 12" aria-hidden="true"><path d="M1 1l5 5-5 5" stroke="currentColor" stroke-width="1.5" fill="none" stroke-linecap="round"/></svg>
     </button>
   </div>
@@ -107,29 +192,28 @@ function ms_num($n): string {
 <main id="ms-main" class="ms-main" aria-live="polite">
   <header class="ms-main__header">
     <div id="ms-order-meta" class="ms-order-meta">
-      <?php if ($first_order): ?>
+      <?php if ( $first_order ) : ?>
         <div class="ms-order-meta__top">
-          <h2 class="ms-order-meta__title">Замовлення № <?php echo esc_html($first_order->order_number??'—'); ?></h2>
-          <span class="ms-order-meta__date"><?php echo esc_html(ms_datetime($first_order->collection_date)); ?></span>
+          <h2 class="ms-order-meta__title">Замовлення № <?php echo esc_html( $first_order->order_number ?? '—' ); ?></h2>
+          <span class="ms-order-meta__date"><?php echo esc_html( ms_datetime( $first_order->collection_date ) ); ?></span>
         </div>
         <div class="ms-order-meta__details">
-          <span>Пацієнт: <?php echo esc_html($first_order->patient_name); ?></span>
+          <span>Пацієнт: <?php echo esc_html( $first_order->patient_name ); ?></span>
         </div>
-      <?php else: ?>
+      <?php else : ?>
         <h2 class="ms-order-meta__title">Медична статистика</h2>
         <p class="ms-text-muted">Оберіть замовлення або імпортуйте PDF</p>
       <?php endif; ?>
     </div>
     <div class="ms-main__actions">
-      <?php if ($first_order): ?>
+      <?php if ( $first_order ) : ?>
         <button type="button" id="ms-delete-btn" class="ms-btn ms-btn--danger"
-                data-order-id="<?php echo absint($first_order->id); ?>" title="Видалити замовлення">
+                data-order-id="<?php echo absint( $first_order->id ); ?>" title="Видалити замовлення">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
             <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
       <?php endif; ?>
-      <!-- Кнопка додавання запису вручну -->
       <button type="button" id="ms-add-btn" class="ms-btn ms-btn--add" title="Додати запис">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
           <path d="M12 5v14M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
@@ -148,36 +232,36 @@ function ms_num($n): string {
   </header>
 
   <div id="ms-table-wrap" class="ms-table-wrap">
-    <?php if ($measurements): ?>
+    <?php if ( $measurements ) : ?>
       <div class="ms-table-head" role="row">
         <div class="ms-col ms-col--indicator" role="columnheader">Показник</div>
         <div class="ms-col ms-col--result"    role="columnheader">Результат</div>
         <div class="ms-col ms-col--ref"       role="columnheader">Реф. знач.</div>
         <div class="ms-col ms-col--action"    role="columnheader"></div>
       </div>
-      <?php foreach ($measurements as $row):
-        $normal  = (bool)$row->is_normal;
-        $numDisp = rtrim(rtrim((string)$row->result_value,'0'),'.');
+      <?php foreach ( $measurements as $row ) :
+        $normal  = (bool) $row->is_normal;
+        $numDisp = rtrim( rtrim( (string) $row->result_value, '0' ), '.' );
       ?>
-      <div class="ms-row <?php echo $normal?'':'ms-row--abnormal'; ?>" role="row"
-           data-meas-id="<?php echo absint($row->meas_id); ?>"
-           data-ind-id="<?php echo absint($row->ind_id); ?>">
+      <div class="ms-row <?php echo $normal ? '' : 'ms-row--abnormal'; ?>" role="row"
+           data-meas-id="<?php echo absint( $row->meas_id ); ?>"
+           data-ind-id="<?php echo absint( $row->ind_id ); ?>">
         <div class="ms-col ms-col--indicator" role="cell">
-          <span class="ms-indicator__name"><?php echo esc_html($row->ind_name); ?></span>
-          <?php if ($row->category): ?><span class="ms-indicator__category"><?php echo esc_html($row->category); ?></span><?php endif; ?>
-          <?php if ($row->interpretation_hint): ?>
-            <span class="ms-indicator__hint"><?php echo esc_html($row->interpretation_hint); ?></span>
+          <span class="ms-indicator__name"><?php echo esc_html( $row->ind_name ); ?></span>
+          <?php if ( $row->category ) : ?><span class="ms-indicator__category"><?php echo esc_html( $row->category ); ?></span><?php endif; ?>
+          <?php if ( $row->interpretation_hint ) : ?>
+            <span class="ms-indicator__hint"><?php echo esc_html( $row->interpretation_hint ); ?></span>
           <?php endif; ?>
         </div>
         <div class="ms-col ms-col--result" role="cell">
-          <span class="ms-value <?php echo $normal?'':'ms-value--abnormal'; ?>"><?php echo esc_html($numDisp); ?></span>
-          <?php if ($row->measure): ?><span class="ms-unit"><?php echo esc_html($row->measure); ?></span><?php endif; ?>
+          <span class="ms-value <?php echo $normal ? '' : 'ms-value--abnormal'; ?>"><?php echo esc_html( $numDisp ); ?></span>
+          <?php if ( $row->measure ) : ?><span class="ms-unit"><?php echo esc_html( $row->measure ); ?></span><?php endif; ?>
         </div>
         <div class="ms-col ms-col--ref" role="cell">
-          <?php if ($row->min!==null&&$row->max!==null): ?>
-            <span class="ms-ref"><?php echo esc_html(ms_num($row->min).' – '.ms_num($row->max)); ?></span>
-            <?php if ($row->measure): ?><span class="ms-unit"><?php echo esc_html($row->measure); ?></span><?php endif; ?>
-          <?php else: ?><span class="ms-text-muted">—</span><?php endif; ?>
+          <?php if ( $row->min !== null && $row->max !== null ) : ?>
+            <span class="ms-ref"><?php echo esc_html( ms_num( $row->min ) . ' – ' . ms_num( $row->max ) ); ?></span>
+            <?php if ( $row->measure ) : ?><span class="ms-unit"><?php echo esc_html( $row->measure ); ?></span><?php endif; ?>
+          <?php else : ?><span class="ms-text-muted">—</span><?php endif; ?>
         </div>
         <div class="ms-col ms-col--action" role="cell">
           <button type="button" class="ms-edit-btn" aria-label="Редагувати">
@@ -186,9 +270,9 @@ function ms_num($n): string {
         </div>
       </div>
       <?php endforeach; ?>
-    <?php elseif ($first_order): ?>
+    <?php elseif ( $first_order ) : ?>
       <p class="ms-empty ms-empty--main">Показники відсутні.</p>
-    <?php else: ?>
+    <?php else : ?>
       <div class="ms-welcome"><p>Оберіть замовлення або перетягніть PDF-файл із результатами CSD LAB.</p></div>
     <?php endif; ?>
   </div>
@@ -261,8 +345,6 @@ function ms_num($n): string {
       <button type="button" id="ms-add-modal-close" class="ms-modal__close" aria-label="Закрити">✕</button>
     </div>
     <div class="ms-modal__body ms-add-body">
-
-      <!-- Хедер замовлення -->
       <section class="ms-add-section">
         <h4 class="ms-add-section__title">Замовлення</h4>
         <div class="ms-add-grid ms-add-grid--header">
@@ -273,7 +355,7 @@ function ms_num($n): string {
           <div class="ms-form-field">
             <label for="ms-add-collection">Дата забору</label>
             <input id="ms-add-collection" type="datetime-local" class="ms-input"
-                   value="<?php echo esc_attr(date('Y-m-d\TH:i')); ?>">
+                   value="<?php echo esc_attr( date( 'Y-m-d\TH:i' ) ); ?>">
           </div>
           <div class="ms-form-field">
             <label for="ms-add-doctor">Лікар</label>
@@ -285,17 +367,15 @@ function ms_num($n): string {
           </div>
           <div class="ms-form-field">
             <label for="ms-add-patient">Пацієнт</label>
-            <input id="ms-add-patient" type="text" class="ms-input"
-                   value="Дикий Олександр Вікторович">
+            <input id="ms-add-patient" type="text" class="ms-input">
           </div>
           <div class="ms-form-field">
             <label for="ms-add-dob">Дата народження</label>
-            <input id="ms-add-dob" type="date" class="ms-input" value="1969-05-20">
+            <input id="ms-add-dob" type="date" class="ms-input">
           </div>
         </div>
       </section>
 
-      <!-- Таблиця показників -->
       <section class="ms-add-section">
         <div class="ms-add-section__head">
           <h4 class="ms-add-section__title">Показники</h4>
@@ -308,13 +388,8 @@ function ms_num($n): string {
         </div>
         <div class="ms-meas-table-wrap">
           <div class="ms-meas-table-head">
-            <span>Назва показника</span>
-            <span>Мін</span>
-            <span>Макс</span>
-            <span>Одиниця</span>
-            <span>Результат</span>
-            <span>Дата вик.</span>
-            <span></span>
+            <span>Назва показника</span><span>Мін</span><span>Макс</span>
+            <span>Одиниця</span><span>Результат</span><span>Дата вик.</span><span></span>
           </div>
           <div id="ms-meas-rows"><!-- рядки додаються JS --></div>
         </div>
@@ -340,7 +415,7 @@ function ms_num($n): string {
     <div class="ms-meas-cell"><input type="text" class="ms-input ms-ind-measure" readonly tabindex="-1"></div>
     <div class="ms-meas-cell"><input type="number" step="0.001" class="ms-input ms-meas-value" placeholder="0.00"></div>
     <div class="ms-meas-cell">
-      <input type="datetime-local" class="ms-input ms-meas-date" value="<?php echo esc_attr(date('Y-m-d\TH:i')); ?>">
+      <input type="datetime-local" class="ms-input ms-meas-date" value="<?php echo esc_attr( date( 'Y-m-d\TH:i' ) ); ?>">
     </div>
     <div class="ms-meas-cell ms-meas-cell--del">
       <button type="button" class="ms-row-del-btn" aria-label="Видалити рядок">

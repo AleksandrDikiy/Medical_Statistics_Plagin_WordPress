@@ -197,9 +197,15 @@ class ImportCsd {
 
     private function parseOrder( array $rows ): int {
         $order = [
-            'order_number' => null, 'patient_name' => 'Unknown',
-            'patient_dob'  => null, 'collection_date' => null,
-            'doctor_name'  => null, 'branch_info' => null,
+            'order_number'    => null,
+            'patient_name'    => 'Unknown',
+            'patient_dob'     => null,
+            'collection_date' => null,
+            'doctor_name'     => null,
+            'branch_info'     => null,
+            // Assign the currently authenticated WP user; fall back to Admin (1)
+            // when called from a CLI/cron context where no user is logged in.
+            'id_user'         => get_current_user_id() ?: 1,
         ];
         $patientParts = []; $branchParts = [];
         $inPatient = false; $inBranch = false;
@@ -275,7 +281,7 @@ class ImportCsd {
                 return $existing;
             }
         }
-        $ok = $this->db->insert( $this->t_ord, $order, [ '%s','%s','%s','%s','%s','%s' ] );
+        $ok = $this->db->insert( $this->t_ord, $order, [ '%s','%s','%s','%s','%s','%s','%d' ] );
         if ( false === $ok ) throw new \RuntimeException( 'DB insert (ordering): ' . $this->db->last_error );
         return (int) $this->db->insert_id;
     }
