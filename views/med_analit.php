@@ -1,6 +1,9 @@
 <?php
 /**
  * views/med_analit.php — Аналітика показника [medical_analit]
+ * 
+ * Version:      1.5.4
+ * Date_update: 2026-04-30
  */
 namespace MedicalStatistics;
 defined( 'ABSPATH' ) || exit;

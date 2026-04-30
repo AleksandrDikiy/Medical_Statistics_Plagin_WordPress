@@ -3,9 +3,11 @@
  * Plugin Name:  Medical Statistics
  * Plugin URI:   #
  * Description:  Трекер медичних показників — імпорт PDF CSD LAB, зберігання, візуалізація.
- * Version:      1.5.4
- * Author:       Dev
+ * Author:       DAV
  * Text Domain:  med-stat
+ * 
+ * Version:      1.5.4
+ * Date_update: 2026-04-30
  */
 
 declare( strict_types = 1 );
@@ -214,6 +216,7 @@ function ajax_chart_data(): void {
     global $wpdb;
     $tInd  = $wpdb->prefix . 'med_indicator';
     $tMeas = $wpdb->prefix . 'med_measurement';
+    $tOrd  = $wpdb->prefix . 'med_ordering';
 
     $indId    = absint( $_POST['ind_id']    ?? 0 );
     $dateFrom = sanitize_text_field( wp_unslash( $_POST['date_from'] ?? '' ) );
@@ -226,15 +229,25 @@ function ajax_chart_data(): void {
     $dtFrom = $dateFrom ? $dateFrom . ' 00:00:00' : '1900-01-01 00:00:00';
     $dtTo   = $dateTo   ? $dateTo   . ' 23:59:59' : '2099-12-31 23:59:59';
 
+    // 1. Формуємо аргументи для $wpdb->prepare
+    $args = [ $indId, $dtFrom, $dtTo ];
+    
+    // 2. Додаємо Row-Level Security (модифікує $args за посиланням)
+    $rls_clause = rls_clause( $args );
+
+    // 3. Змінений запит із JOIN wp_med_ordering та функцією COALESCE
     $rows = $wpdb->get_results( $wpdb->prepare(
         "SELECT i.id, i.name, i.min, i.max, i.measure,
-                m.result_value, m.execution_date, m.is_normal
+                m.result_value, m.is_normal,
+                COALESCE(m.execution_date, o.collection_date, o.created_at) AS actual_date
          FROM {$tInd} i
          JOIN {$tMeas} m ON m.id_indicator = i.id
+         JOIN {$tOrd} o ON m.id_order = o.id
          WHERE i.id = %d
-           AND m.execution_date BETWEEN %s AND %s
-         ORDER BY m.execution_date ASC",
-        $indId, $dtFrom, $dtTo
+           AND COALESCE(m.execution_date, o.collection_date, o.created_at) BETWEEN %s AND %s
+           {$rls_clause}
+         ORDER BY COALESCE(m.execution_date, o.collection_date, o.created_at) ASC",
+        ...$args
     ) );
 
     if ( empty( $rows ) ) {
@@ -248,7 +261,8 @@ function ajax_chart_data(): void {
     $labels = [];
     $values = [];
     foreach ( $rows as $row ) {
-        $ts       = $row->execution_date ? strtotime( $row->execution_date ) : 0;
+        // Беремо актуальну дату (actual_date) замість проблемної execution_date
+        $ts       = $row->actual_date ? strtotime( $row->actual_date ) : 0;
         $labels[] = $ts ? date( 'd.m.Y', $ts ) : '—';
         $values[] = (float) $row->result_value;
     }
